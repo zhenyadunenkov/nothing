@@ -34,7 +34,7 @@ laureates <- laureates %>%
          birth.place.cityNow.en, birth.place.countryNow.en, 
          birth.place.continent.en, category.en, motivation.en, name.en, 
          nameNow.en, city.en, country.en, cityNow.en, countryNow.en, 
-         death.date, givenName.en, familyName.en) %>%
+         death.date, givenName.en, familyName.en, orgName.en) %>%
   # Переводим даты в удобный формат, дополняем недостающие позиции
   # стандартными значениями
   mutate(dateAwarded = ifelse(is.na(dateAwarded), 
@@ -59,21 +59,30 @@ laureates <- laureates %>%
 # Считаем среднюю продолжительность жизни
 longevity <- select(laureates, lifetime, knownName.en) %>% 
   na.omit() %>% 
-  unique() # просим уважаемых неоднократных лауреатов не влиять статистику
+  unique() # просим уважаемых неоднократных лауреатов не влиять статистику 
 
-  summary(longevity)
-# Min.   : 39.22        
-# 1st Qu.: 74.47     
-# Median : 82.44    
-# Mean   : 80.82                     
-# 3rd Qu.: 88.59                     
-# Max.   :103.69  
+annotations_longevity <- data.frame(
+  x = c(round(min(longevity$lifetime), 2), 
+        round(mean(longevity$lifetime), 2), 
+        round(max(longevity$lifetime), 2)),
+  y = c(5, 35, 5),
+  label = c("Мин.", "Средн.", "Макс.")
+) 
+
 
 # Строим график 
-ggplot(longevity, aes(x = lifetime)) +
-  geom_density() +
-  scale_x_continuous("Продолжительность жизни") +
-  scale_y_continuous(element_blank())
+ggplot(longevity, aes(x=lifetime)) +
+  geom_histogram(color = "#000000", fill = "#0099F8", binwidth=1) +
+  geom_text(data = annotations_longevity, aes(x = x, y = y, label = paste(label, x)), 
+            size = 3.5) +
+  labs(
+    x = "Продолжительность жизни",
+    y = "Число лауреатов"
+  ) +
+  scale_x_continuous(breaks = seq(0, 105, 5)) +
+  scale_y_continuous(breaks = seq(0, 35, 5)) +
+  theme_test()
+
 
 
 # Считаем среднюю продолжительность жизни по областям
@@ -105,48 +114,162 @@ select(laureates, c(knownName.en, current_age)) %>%
 
 # Считаем среднюю продолжительность жизни по пятилетиям
 avg_lifetime_by_years <- select(laureates, c(awardYear, knownName.en, lifetime)) %>%
-  filter(awardYear < 1972) %>%
+  filter(awardYear < 1971) %>%
   na.omit() %>% 
   unique() %>% 
   group_by(awardYear) %>% 
   summarize(mean=mean(lifetime)) %>% 
-  group_by(grp = rep(row_number(), length.out = n(), each = 5)) %>% 
+  group_by(grp = floor((as.numeric(awardYear)-1)/5)-190) %>% 
   summarize(avg_lifetime=mean(mean)) %>% 
-  mutate(period=c("1901-05", "1906-10","1911-15","1917-21","1922-26",
-                  "1927-31","1932-36","1937-44","1945-49","1950-54",
-                  "1955-59","1960-64","1965-69", "1970-71"))
+  mutate(period=c("1901-05", "1906-10","1911-15","1916-20","1921-25",
+                  "1926-30","1931-35", "1936-40","1941-45","1946-50",
+                  "1951-55","1956-60","1961-65","1966-70")) %>%
+  mutate(avg_lifetime=round(avg_lifetime, 1)) %>% 
+  # добавляем примерный медианный возраст США, чтобы
+  # посмотреть, есть ли корелляция между изменением 
+  # среднего возраста лауреатов и средним медианным возрастом
+  mutate(US_avg_lifetime = c(48.7, # 1905
+                             50.0, # 1910
+                             54.5, # 1915
+                             54.1, # 1920
+                             59.0, # 1925
+                             59.7, # 1930
+                             61.7, # 1935
+                             62.9, # 1940
+                             65.9, # 1945
+                             68.2, # 1950
+                             69.6, # 1955
+                             69.7, # 1960
+                             70.2, # 1965
+                             70.9)) # 1970
+# Источник данных по США: https://fraser.stlouisfed.org/title/historical-statistics-united-states-237/volume-1-5809
+# Схема B107--115 
+
+
 
 # Строим график по средней продолжительности жизни
-ggplot(data=avg_lifetime_by_years, aes(period, avg_lifetime)) +
-  geom_point() +
-  theme_bw() +
-  theme(axis.text.x = element_text(angle = 90, vjust = 0.5, hjust=1)) +
+ggplot(data=avg_lifetime_by_years, aes(period, avg_lifetime, group=1)) +
+  geom_point(color = "#000000", fill = "#0099F8") +
   ylab("Ср. продолжительность жизни") +
-  xlab(element_blank())
+  xlab(element_blank()) +
+  scale_y_continuous(breaks = seq(0, 100, by = 5)) +
+  geom_smooth(aes(x=period, y=US_avg_lifetime, color="Ср. пр. жизни в США"), method="lm") +
+  geom_smooth(aes(x=period, y=avg_lifetime, color="Ср. пр. жизни лауреатов"), method="lm") +
+  theme_test() +
+  theme(legend.position = 'right',
+        plot.title = element_text(hjust = 0.5),
+        axis.text.x = element_text(angle = 90, vjust = 0.5, hjust=1)) +
+  geom_text(aes(, , 
+                label = avg_lifetime), color="black",
+            hjust = 1.3, size=3) +
+  labs(colour="Линии")
+
 
 # Средний возраст лауреатов и график
-award_age <- select(laureates, c(knownName.en, age_of_award))
-
-ggplot(award_age, aes(x = age_of_award)) +
-  geom_density() +
-  scale_x_continuous("Возраст лауреата на момент награждения") +
-  scale_y_continuous(element_blank())
+award_age <- select(laureates, c(knownName.en, age_of_award, category.en)) %>% 
+  na.omit() 
 
 
-# Средний возраст лауреатов по годам премии
-award_age_by_years <- select(laureates, c(awardYear, age_of_award)) %>%
+ggplot(award_age, aes(x=age_of_award, fill=category.en)) +
+  geom_histogram(color = "#000000", binwidth=3) + 
+  scale_x_continuous(breaks = seq(0, 105, 5)) +
+  scale_y_continuous(breaks = seq(0, 100, 5)) +
+  theme_test() +
+  labs(
+    x = "Возраст награждения",
+    y = "Число лауреатов") +
+  scale_fill_discrete(name = "Категории (ср. возраст)", limits=c("Economic Sciences", 
+                                                   "Literature", 
+                                                   "Peace", 
+                                                   "Chemistry", 
+                                                   "Physiology or Medicine", 
+                                                   "Physics"),
+                      labels = c("Экономика (66.4)", 
+                                 "Литература (64.8)", 
+                                 "Премия мира (61.1)",
+                                 "Химия (58.8)",
+                                 "Медицина (58.7)",
+                                 "Физика (58.0)"))
+
+# Смотрим на каждую область отдельно
+literature <- select(laureates, c(knownName.en, age_of_award, category.en)) %>%
+  na.omit() %>%
+  filter(category.en=="Literature")
+
+economics <- select(laureates, c(knownName.en, age_of_award, category.en)) %>%
+  na.omit() %>%
+  filter(category.en=="Economic Sciences")
+
+physics <- select(laureates, c(knownName.en, age_of_award, category.en)) %>% 
   na.omit() %>% 
-  group_by(awardYear) %>% 
-  summarize(mean = mean(age_of_award))
+  filter(category.en=="Physics")
 
-# Строим график по среднему возрасту награждения
-ggplot(data=award_age_by_years, aes(awardYear, mean)) +
-  geom_point() +
-  theme_bw() +
-  theme(axis.text.x = element_text(angle = 90, vjust = 0.5, hjust=1)) +
-  ylab("Ср. возраст на момент награждения") +
-  xlab(element_blank()) +
-  scale_x_discrete(breaks = seq(1900, 2020, by = 5))
+chemistry <- select(laureates, c(knownName.en, age_of_award, category.en)) %>% 
+  na.omit() %>% 
+  filter(category.en=="Chemistry")
+
+medicine <- select(laureates, c(knownName.en, age_of_award, category.en)) %>% 
+  na.omit() %>% 
+  filter(category.en=="Physiology or Medicine")
+
+peace <- select(laureates, c(knownName.en, age_of_award, category.en)) %>% 
+  na.omit() %>% 
+  filter(category.en=="Peace")
+
+lit <- ggplot(literature, aes(x=age_of_award)) +
+  geom_density() +
+  theme_test() +
+  theme(axis.text.y = element_blank(), axis.ticks.y = element_blank()) +
+  labs(
+    x = "Литература",
+    y = "") +
+  coord_cartesian(xlim=c(30,100))
+  
+    
+eco <- ggplot(economics, aes(x=age_of_award)) +
+  geom_density() +
+  theme_test() +
+  theme(axis.text.y = element_blank(), axis.ticks.y = element_blank()) +
+  labs(
+    x = "Экономика",
+    y = "")  +
+  coord_cartesian(xlim=c(30,100))
+phys <- ggplot(physics, aes(x=age_of_award)) +
+  geom_density() +
+  theme_test() +
+  theme(axis.text.y = element_blank(), axis.ticks.y = element_blank()) +
+  labs(
+    x = "Физика",
+    y = "")  +
+  coord_cartesian(xlim=c(30,100))
+chem <- ggplot(chemistry, aes(x=age_of_award)) +
+  geom_density() +
+  theme_test() +
+  theme(axis.text.y = element_blank(), axis.ticks.y = element_blank()) +
+  labs(
+    x = "Химия",
+    y = "")  +
+  coord_cartesian(xlim=c(30,100))
+med <- ggplot(medicine, aes(x=age_of_award)) +
+  geom_density() +
+  theme_test() +
+  theme(axis.text.y = element_blank(), axis.ticks.y = element_blank()) +
+  labs(
+    x = "Медицина",
+    y = "")  +
+  coord_cartesian(xlim=c(30,100))
+pea <- ggplot(peace, aes(x=age_of_award)) +
+  geom_density() +
+  theme_test() +
+  theme(axis.text.y = element_blank(), axis.ticks.y = element_blank()) +
+  labs(
+    x = "Премия мира",
+    y = "")  +
+  coord_cartesian(xlim=c(30,100))
+
+grid.arrange(med, eco, phys, chem, pea, lit)
+
+
 
 # Средний возраст награждения
 award_age <- select(laureates, c(knownName.en, awardYear, age_of_award)) %>% 
@@ -169,117 +292,94 @@ award_age
 # 5 Physiology or Medicine  58.7
 # 6 Physics                 58.0
 
-# Нобелевские лауреаты по месяцам рождения и по областям
-monthes_categories <- laureates %>%
-  select(knownName.en, month_of_birth, category.en) %>% 
-  unique() %>% 
-  group_by(month_of_birth, category.en) %>% 
-  count() %>% 
-  na.omit() %>% 
-  mutate(days_num = ifelse(month_of_birth %in% c("January", "March", "May", "July", "August", "October", "December"),
-                           31,
-                           ifelse(month_of_birth %in% c("April", "June", "September", "November"),
-                                  30,
-                                  28.25))) %>% 
-  mutate(month_coef = round(n / days_num, 3))
-
-# График
-ggplot(monthes_categories, aes(y=month_coef, x=month_of_birth, fill=category.en)) +
-  geom_col() +
-  theme(axis.text.x = element_text(angle = 90, vjust = 0.5, hjust=1)) +
-  xlab(element_blank()) +
-  ylab(element_blank()) +
-  scale_fill_discrete(name = "Категории")
 
 
-# "НЕМНОЖКО GENDER STUDIES"
+# "НЕМНОГО GENDER STUDIES"
 # Соотношение мужчин и женщин среди лауреатов
 laureates %>% select(knownName.en, gender) %>% 
   na.omit() %>% 
-  # unique() %>%
+  unique() %>%
   group_by(gender) %>% 
   count()
-# 1 female    68
-# 2 male     980
+# 1 female    64
+# 2 male     901
 
-female_aw <- laureates %>% select(knownName.en, gender, awardYear) %>% 
+female_aw <- laureates %>% select(knownName.en, gender, awardYear, category.en) %>%
+  na.omit() %>% 
   filter(gender=="female") %>%
-  group_by(gender, awardYear) %>% 
-  count()
+  unique() %>% 
+  mutate(awardYear = as.numeric(awardYear))
 
-female_awards <- tibble(awardYear = 1911:2023) %>% 
-  mutate(awardYear = as.character(awardYear)) %>% 
-  left_join(female_aw) %>% 
-  select(c(awardYear, n)) %>% 
-  group_by(grp = rep(row_number(), length.out = n(), each = 10)) %>% 
-  mutate(n = ifelse(is.na(n), 0, n)) %>%
-  summarize(sum_awards = sum(n)) %>% 
-  mutate(period=c("1911-20", "1921-30","1931-40","1941-50","1951-60",
-                  "1961-70","1971-80","1981-90","1991-00","2001-10",
-                  "2011-20","2021-23"))
-
-# График награждений женщин по десятилетиям
-ggplot(female_awards, aes(period, sum_awards)) +
-  geom_col() +
-  theme(axis.text.x = element_text(angle = 90, vjust = 0.5, hjust=1)) +
-  ylab("Число награждений") +
-  xlab(element_blank())
-
-# Распредление женщин-лауреатов по областям 
-fem_awards <- laureates %>% select(knownName.en, gender, category.en) %>% 
-  filter(gender=="female") %>% 
-  group_by(category.en) %>% 
-  count() %>% 
-  arrange(desc(n))
-
-fem_awards
-# 1 Peace                     19
-# 2 Literature                17
-# 3 Physiology or Medicine    14
-# 4 Chemistry                  9
-# 5 Physics                    5
-# 6 Economic Sciences          4
-
-
+ggplot(female_aw, aes(x=awardYear, fill=category.en)) +
+  geom_histogram(color = "#000000", center=1905, binwidth=10) + 
+  scale_x_continuous(breaks = seq(1900, 2026, 10)) + 
+  scale_y_continuous(breaks = seq(0, 20, 1)) +
+  theme_test() +
+  labs(
+    x = "Возраст награждения",
+    y = "Число лауреатов") +
+  scale_fill_discrete(name = "Категории (число лауреатов)", limits=c("Peace", 
+                                                                 "Literature", 
+                                                                 "Physiology or Medicine", 
+                                                                 "Chemistry", 
+                                                                 "Physics", 
+                                                                 "Economic Sciences"),
+                      labels = c("Премия мира (19)", 
+                                 "Литература (17)", 
+                                 "Медицина (14)",
+                                 "Химия (9)",
+                                 "Физика (5)",
+                                 "Экономика (4)")) +
+theme(axis.text.x = element_text(angle = 90))
+  
 # "УНИВЕРСИТЕТЫ"
 
 # Распределение лауреатов по странам университетов
 top_countries <- select(laureates, c(awardYear, category.en, countryNow.en, knownName.en)) %>%
   unique() %>% 
-  group_by(countryNow.en) %>% 
-  count() %>% 
   na.omit() %>% 
-  arrange(desc(n))
+  group_by(countryNow.en, category.en) %>% 
+  count(countryNow.en, category.en) 
 
-# график 
-ggplot(top_countries, aes(reorder(countryNow.en, n), n, countryNow.en)) +
+top_countries_total <- select(laureates, c(awardYear, category.en, countryNow.en, knownName.en)) %>%
+  unique() %>% 
+  na.omit() %>% 
+  group_by(countryNow.en) %>% 
+  count(countryNow.en)
+colnames(top_countries_total)[2] = "n_total"
+
+top_countries <- left_join(top_countries, top_countries_total, copy = FALSE)
+
+
+
+ggplot(top_countries, aes(reorder(countryNow.en, n_total), n, countryNow.en, fill=category.en)) +
   geom_col() +
   coord_flip() +
-  ylab("Число лауреатов") +
-  xlab(element_blank()) +
-  geom_text(aes(label = n), size = 2.5, nudge_y = 10, color="black")
-
-# Распределение стран университетов по областям
-countries_by_fields <- select(laureates, c(awardYear, category.en, countryNow.en, knownName.en)) %>%
-  unique() %>% 
-  group_by(countryNow.en, category.en) %>% 
-  count() %>% 
-  na.omit() %>% 
-  arrange(desc(n)) %>% 
-  filter(countryNow.en %in% c("USA", "United Kingdom", "Germany", "France",
-                              "Switzerland", "Japan", "Sweden", "Russia", 
-                              "Denmark", "the Netherlands"))
-# график
-ggplot(countries_by_fields, aes(reorder(countryNow.en, n), n, countryNow.en, fill=category.en)) +
-  geom_col(position="dodge") +
-  ylab("Число лауреатов") +
-  xlab(element_blank()) +
-  scale_fill_discrete(name = "Категории")
+  scale_fill_discrete(name = "Категории", limits=c("Physiology or Medicine",
+                                                   "Physics", 
+                                                   "Peace",
+                                                   "Economic Sciences",
+                                                   "Chemistry", 
+                                                   "Literature"),
+                      labels = c("Медицина", 
+                                 "Физика", 
+                                 "Премия мира",
+                                 "Экономика",
+                                 "Химия",
+                                 "Литература")) +
+  geom_text(aes(y = 1.1, , group = countryNow.en, 
+                label = n_total), color="gray",
+            hjust = 1.3, size=3) +
+  theme_test() +
+  labs(
+    x = "",
+    y = "Число лауреатов")
+  
 
 # Распределение лауреатов по университетам
-top_uni <- select(laureates, c(name.en, countryNow.en, knownName.en)) %>%
+top_uni <- select(laureates, c(name.en, countryNow.en, knownName.en, cityNow.en)) %>%
   na.omit() %>%
-  group_by(name.en, countryNow.en) %>% 
+  group_by(name.en, cityNow.en, countryNow.en) %>% 
   count() %>% 
   arrange(desc(n)) %>% 
   filter(n>5)
@@ -290,8 +390,12 @@ ggplot(top_uni, aes(reorder(name.en, n), n, name.en, fill=countryNow.en)) +
   coord_flip() +
   ylab("Число лауреатов") +
   xlab(element_blank()) +
-  scale_fill_discrete(name = "Страны") +
-  geom_text(aes(label = n), size = 3, nudge_y = -2, color="white")
+  scale_fill_discrete(name = "Страны",
+                      labels = c("Франция","Германия","Россия",
+                                 "Великобритания", "США")) +
+  geom_text(aes(label = n), size = 3, nudge_y = -3, color="white") +
+  
+    theme_test()
 
 
 # Распределение лауреатов по странам рождения
@@ -325,24 +429,32 @@ birth_countries <- select(laureates, c(knownName.en,
   arrange(desc(n)) %>% 
   filter(n > 2)
 
+
+top_countries <- select(laureates, c(awardYear, countryNow.en, knownName.en)) %>%
+  unique() %>% 
+  na.omit() %>% 
+  group_by(countryNow.en) %>% 
+  count(countryNow.en) 
+
 colnames(top_countries) = c("birth.place.country.en", "n_old")
 combined <- left_join(birth_countries, top_countries)
 
 # график
 ggplot(combined, aes(reorder(birth.place.country.en, n), n, birth.place.country.en)) +
-  geom_col() +
+  geom_col(fill = "#0099F8") +
   geom_col(aes(birth.place.country.en, n_old), color="pink", alpha=0) +
   coord_flip() +
   ylab("Число лауреатов") +
   xlab(element_blank()) +
-  geom_text(aes(label = n), size = 2.5, nudge_y = 10, color="black")
+  geom_text(aes(label = n), size = 2.5, nudge_y = 10, color="black") +
+  theme_test()  
 
 # Лауреаты по городам рождения
 birth_cities <- select(laureates, c(knownName.en, 
-                                       awardYear, 
-                                       birth.place.cityNow.en,
-                                        birth.place.country.en,
-                                       category.en)) %>% 
+                                    awardYear, 
+                                    birth.place.cityNow.en,
+                                    birth.place.country.en,
+                                    category.en)) %>% 
   na.omit() %>% 
   mutate(birth.place.country.en = ifelse(birth.place.country.en == "Russian Empire" |
                                            birth.place.country.en == "USSR",
@@ -374,9 +486,14 @@ ggplot(birth_cities, aes(reorder(birth.place.cityNow.en, n), n, birth.place.city
   coord_flip() +
   ylab("Число лауреатов") +
   xlab(element_blank()) +
-  geom_text(aes(label = n), size = 3, nudge_y = 2, color="black") +
-  scale_fill_discrete(name = "Страны")
+  scale_fill_discrete(name = "Страны",
+                      labels = c("Австрия","Франция","Германия","Венгрия",
+                                 "Россия", "Швеция","Великобритания", "США")) +
+  geom_text(aes(label = n), size = 3, nudge_y = -3, color="white") +
   
+  theme_test()
+
+
 # Соотносим лауреатов с населением городов
 cities <- c("New York, NY","Paris","London","Vienna","Chicago, IL","Berlin",
             "Boston, MA","Stockholm","Washington, D.C.","Budapest","Moscow",
@@ -432,7 +549,15 @@ ggplot(birth_cities, aes(reorder(birth.place.cityNow.en, nobel_coef), nobel_coef
                          fill=birth.place.country.en)) +
   geom_col() +
   coord_flip() +
-  ylab("Лауреатов на каждый миллион жителей города") +
+  ylab("Лауреатов на млн жителей") +
+  xlab(element_blank()) +
+  scale_fill_discrete(name = "Страны",
+                      labels = c("Австрия","Франция","Германия","Венгрия",
+                                 "Россия", "Швеция","Великобритания", "США")) +
+  geom_text(aes(label = nobel_coef), size = 3, nudge_y = 1, color="black") +
+  theme_test()
+
+    ylab("Лауреатов на каждый миллион жителей города") +
   xlab(element_blank()) +
   geom_text(aes(label = nobel_coef), size = 3, nudge_y = 1, color="black") +
   scale_fill_discrete(name = "Страны")
@@ -443,18 +568,64 @@ ggplot(birth_cities, aes(reorder(birth.place.cityNow.en, nobel_coef), nobel_coef
 
 # Смотрим на миграцию
 migration <- laureates %>% 
-  select(knownName.en, birth.place.countryNow.en, birth.place.country.en, countryNow.en) %>% 
+  select(knownName.en, birth.place.countryNow.en, 
+         birth.place.country.en, 
+         countryNow.en, 
+         category.en,
+         awardYear) %>% 
   na.omit() %>% 
   mutate(birth.place.countryNow.en = ifelse(birth.place.country.en == "Russian Empire",
-                                           "Russia",
-                                           birth.place.countryNow.en)) %>% 
+                                            "Russia",
+                                            birth.place.countryNow.en)) %>% 
   mutate(birth.place.countryNow.en = ifelse(birth.place.country.en == "USSR",
                                             "Russia",
                                             birth.place.countryNow.en)) %>% 
   filter(birth.place.countryNow.en != countryNow.en) %>% 
-  select(knownName.en, birth.place.countryNow.en, countryNow.en)
+  select(knownName.en, birth.place.countryNow.en, countryNow.en, category.en, awardYear) %>% 
+  filter(knownName.en != "Marie Curie") %>% 
+  filter(knownName.en != "Friz Lipman") %>%
+  filter(knownName.en != "Otto Wallach") %>%
+  filter(knownName.en != "Ragnar Granit") %>%
+  filter(knownName.en != "Artturi Virtanen") %>%
+  filter(knownName.en != "Wilhelm Wien") %>% 
+  filter(knownName.en != "Ilya Prigogine") %>% 
+  add_row(knownName.en="Ilya Prigogine", 
+          birth.place.countryNow.en="Russia", 
+          countryNow.en="USA", 
+          category.en="Chemistry", 
+          awardYear="1977") %>% 
+  unique()
 
-colnames(migration) = c("name", "from", "to")
+
+colnames(migration) = c("name", "from", "to", "category", "year")
+
+russians <- migration %>% 
+  filter(from=="Russia")
+
+ggplot(russians, aes(x=to, fill=category)) +
+  geom_histogram(stat="count") +
+  coord_flip() +
+  xlab(element_blank()) +
+  ylab(element_blank()) +
+  scale_fill_discrete(name="Категории", labels=c("Химия",
+                                                 "Экономика",
+                                                 "Физика",
+                                                 "Медицина")) +
+  scale_y_continuous(breaks = seq(0, 20, 1)) +
+  theme_test()
+
+ggplot(female_aw, aes(x=awardYear, fill=category.en)) +
+  geom_histogram(color = "#000000", center=1905, binwidth=10) + 
+  scale_x_continuous(breaks = seq(1900, 2026, 10)) + 
+  scale_y_continuous(breaks = seq(0, 20, 1)) +
+  theme_test() +
+  
+
+
+
+
+
+  
 
 top_from <- migration %>% 
   group_by(from) %>% 
@@ -474,17 +645,22 @@ top_from_to <- migration %>%
 
 # графики
 g1 <- ggplot(top_from, aes(reorder(from, n), n, from)) +
-  geom_col() +
+  geom_col(color = "#000000", fill = "#0099F8") +
   coord_flip() +
   ylab("Утечка мозгов") +
   xlab(element_blank()) +
-  geom_text(aes(label = n), size = 3, nudge_y = 1, color="black")
+  geom_text(aes(label = n), size = 3, nudge_y = 1, color="black") +
+  theme_test()
 
 g2 <- ggplot(top_to, aes(reorder(to, n), n, to)) +
-  geom_col() +
+  geom_col(color = "#000000", fill = "#0099F8") +
   coord_flip() +
   ylab("Приток мозгов") +
   xlab(element_blank()) +
-  geom_text(aes(label = n), size = 3, nudge_y = 3, color="black")
+  geom_text(aes(label = n), size = 3, nudge_y = 3, color="black")+
+  theme_test()
 
 grid.arrange(g1, g2, ncol=2)
+
+
+
